@@ -2,12 +2,12 @@ package tc2
 
 import (
   "github.com/antlr/antlr4/runtime/Go/antlr"
-  "github.com/vulogov/tc2/parser"
 )
 
 var VERSION = "2.00"
 
 type TCExecListener struct {
+  *BaseBundParserListener
   TC          *TCstate
 }
 
