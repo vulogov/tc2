@@ -19,11 +19,13 @@ pre:
 	go get -u github.com/goml/gobrain
 	go get -u github.com/rocketlaunchr/dataframe-go
 	go get -u github.com/stretchr/testify/assert
+	go get github.com/deckarep/golang-set
+	go get github.com/vulogov/tconsole
 
 build:
-	rm -f bund_lexer.go bund_parser.go *.interp *.tokens bundparser*
-	antlr4 -Dlanguage=Go -package tc2 -o . BundLexer.g4
-	antlr4 -Dlanguage=Go -package tc2 -o . BundParser.g4
+	rm -rf parser
+	antlr4 -Dlanguage=Go  -o parser BundLexer.g4
+	antlr4 -Dlanguage=Go  -o parser BundParser.g4
 c:
 	go build  -v ./...
 test:

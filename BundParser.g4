@@ -4,4 +4,11 @@ options {
 	tokenVocab = BundLexer;
 }
 
-expression: EOF;
+root: ((expression)+| EOF) ;
+
+expression:
+      val=value_ (LSQ (args+=expression)* RSQ)? ;
+
+value_
+	: TOKEN
+	;
