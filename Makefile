@@ -21,14 +21,15 @@ pre:
 	go get -u github.com/stretchr/testify/assert
 	go get github.com/deckarep/golang-set
 	go get github.com/vulogov/tconsole
+	go get github.com/pterm/pterm
 
 build:
 	rm -rf parser
 	antlr4 -Dlanguage=Go  -o parser BundLexer.g4
 	antlr4 -Dlanguage=Go  -o parser BundParser.g4
 c:
-	go build  -v ./...
+	go build  -v .
 test:
-	go test -v
+	go test -v .
 rebuild: pre build dynmod c test
 compile: c test

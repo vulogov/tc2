@@ -3,11 +3,32 @@ lexer grammar BundLexer;
 LSQ: '[' ;
 RSQ: ']' ;
 
+LRQ: '(' ;
+RRQ: ')' ;
+
+THEEND:     ';;' ;
+LAMBDA_HDR: ':' ;
+MACRO_HDR:  ';' ;
+
+HASH: '#' ;
+DOLL: '$' ;
+
 TOKEN
   : INTEGER
   | STRING
   | EXPONENT_OR_POINT_FLOAT
   | BTOKEN
+  ;
+
+DATA
+  : INTEGER
+  | STRING
+  | EXPONENT_OR_POINT_FLOAT
+  ;
+
+Q
+  : INTEGER
+  | EXPONENT_OR_POINT_FLOAT
   ;
 
 INTEGER
@@ -30,6 +51,10 @@ DECIMAL_INTEGER
 
 BTOKEN
   : (LETTER)+ (LETTER)*
+  ;
+
+ID
+  : (UNICODE_LETTER)+ (UNICODE_LETTER|UNICODE_DIGIT)*
   ;
 
 fragment OP
@@ -67,6 +92,8 @@ fragment OP
   | '∃'
   | '∄'
   | '□'
+  | '#'
+  | '.'
   ;
 
 fragment LETTER

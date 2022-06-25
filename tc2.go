@@ -3,6 +3,8 @@ package tc2
 import (
   "os"
   "fmt"
+  "sync"
+  "github.com/pterm/pterm"
   "github.com/gammazero/deque"
   "github.com/google/uuid"
   "github.com/vulogov/tconsole"
@@ -10,8 +12,15 @@ import (
   "github.com/deckarep/golang-set"
   "github.com/antlr/antlr4/runtime/Go/antlr"
   "github.com/vulogov/tc2/parser"
+  "github.com/loveleshsharma/gohive"
+  "github.com/srfrog/dict"
 )
 
+var Functions           cmap.Cmap
+var ExpressionCBChain   deque.Deque[interface{}]
+var Callbacks           cmap.Cmap
+var extType             TCExtType       // Functions for external types generation
+var extTypeStr          TCExtTypeStr    // and conversion
 var log *tconsole.TConsole = nil
 var VERSION = "2.00"
 
@@ -29,7 +38,11 @@ type TCstate struct {
   ID           string
   cfg          cmap.Cmap
   errors       int
+  errmsg       string
+  HandleErr    bool
+  ErrStack     deque.Deque[interface{}]  // Stack of errors
   console      *tconsole.TConsole
+  stack        []pterm.LeveledListItem
   Res          *TwoStack                  // main stack
   ResNames     deque.Deque[interface{}]   // stack of stack names
   ResN         mapset.Set                 // set of stack names
@@ -38,6 +51,18 @@ type TCstate struct {
   Vars         cmap.Cmap                  // variables
   Functions    cmap.Cmap                  // Functions
   UFunctions   cmap.Cmap                  // User Functions
+  UMacros      cmap.Cmap                  // User Macros
+  FCStack      deque.Deque[string]        // Function call stack
+  CodeStack    deque.Deque[string]        // Accumulation for codeblocks
+  FCodeStack   deque.Deque[string]        // Accumulation for function code
+  MCodeStack   deque.Deque[string]        // Accumulation for macro code
+  Ctx          cmap.Cmap                  // Global context
+  CtxStack     deque.Deque[interface{}]   // Stack of local contexts
+  Wg           sync.WaitGroup             // Global wait group
+  Pool        *gohive.PoolService         // Global execution pool
+  ExReq       chan bool                   // Exit request channel
+  IsExitReq   bool                        // Exit flag
+  ExitCb      *dict.Dict                  // Exit callbacks
 }
 
 type tcExecErrorListener struct {
@@ -76,6 +101,7 @@ func Init() *TCstate {
 
   // And finally
   tc.console, _ = tconsole.New(&tc.Vars)
+  tc.stack      = make([]pterm.LeveledListItem, 0)
   if log == nil  {
     log = tc.console
   }
@@ -85,6 +111,27 @@ func Init() *TCstate {
   return tc
 }
 
+func (tc *TCstate) ClearErrors() {
+  tc.Debug("Clearing errors")
+  tc.errors = 0
+  tc.errmsg = ""
+}
+
+func (tc *TCstate) Errors() int {
+  if tc.HandleErr {
+    return 0
+  }
+  return tc.errors
+}
+
+func (tc *TCstate) TrueErrors() int {
+  return tc.errors
+}
+
+func (tc *TCstate) Error() string {
+  return tc.errmsg
+}
+
 func (tc *TCstate) Debug(msg ...interface{}) {
   if tc.console == nil {
     return
@@ -92,22 +139,29 @@ func (tc *TCstate) Debug(msg ...interface{}) {
   tc.console.Debug(msg...)
 }
 
-func (l *tcExecErrorListener) SyntaxError(recognizer antlr.Recognizer, offendingSymbol interface{}, line, column int, msg string, e antlr.RecognitionException) {
-  l.TC.console.Error("Syntax error line=",line,"column=",column, msg)
-	l.errors += 1
+func (tc *TCstate) Debugf(msg string, args ...interface{}) {
+  if tc.console == nil {
+    return
+  }
+  tc.console.Debug(fmt.Sprintf(msg, args...))
 }
-func (l *tcExecErrorListener) ReportAmbiguity(recognizer antlr.Parser, dfa *antlr.DFA, startIndex, stopIndex int, exact bool, ambigAlts *antlr.BitSet, configs antlr.ATNConfigSet) {
-  msgout := fmt.Sprintf("Ambiguity Error")
-  l.TC.console.Error(msgout)
-	l.errors += 1
+
+func (tc *TCstate) GoEval(code string) *TCstate {
+  tc.Wg.Add(1)
+  task := func() {
+    defer tc.Wg.Done()
+    tc.Eval(code)
+  }
+  tc.Pool.Submit(task)
+  return tc
 }
-func (l *tcExecErrorListener) ReportAttemptingFullContext(recognizer antlr.Parser, dfa *antlr.DFA, startIndex, stopIndex int, conflictingAlts *antlr.BitSet, configs antlr.ATNConfigSet) {
-  msgout := fmt.Sprintf("Attempting in Full Context")
-  l.TC.console.Error(msgout)
-	l.errors += 1
+
+func (tc *TCstate) SetError(msg string, args ...interface{}) {
+  tc.errmsg = fmt.Sprintf(msg, args...)
+  tc.errors += 1
+  tc.console.Error(tc.errmsg)
 }
-func (l *tcExecErrorListener) ReportContextSensitivity(recognizer antlr.Parser, dfa *antlr.DFA, startIndex, stopIndex, prediction int, configs antlr.ATNConfigSet) {
-  msgout := fmt.Sprintf("Context sensitivity error")
-  l.TC.console.Error(msgout)
-	l.errors += 1
+
+func (l *TCExecListener) SetError(msg string, args ...interface{}) {
+  l.TC.SetError(msg, args...)
 }
